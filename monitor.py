@@ -159,4 +159,3 @@ if __name__ == "__main__":
                 print('报错了，报错信息是:',e)
     else:
             print('The auth key is empty.Please Check the input').com','https://www.qq.com']
-    timer_post(_http_monitor_target)
