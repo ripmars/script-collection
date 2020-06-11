@@ -1,155 +1,162 @@
-# coding:utf-8
+#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+'''
+@File    :   monitor.py
+@Time    :   2020/01/14 22:37:39
+@Author  :   Chaos
+@Version :   1.0
+@Desc    :   None
+'''
 
-# python lib
-#from subprocess import Popen,PIPE
-from threading import Timer
-import psutil,platform
+# here put the import lib
+
+# import requests post
+from requests import post,exceptions
+from psutil import disk_usage
 import time,datetime
-#import threading
-import pycurl
-#import StringIO
-import sys,os,socket
-#import ping
-import json
-#import urllib, urllib2,requests
+from argparse import ArgumentParser as argm
+from os import path,popen,statvfs,listdir,remove
+from socket import gethostname
+import re
+import fnmatch
 
-
-def write_to_file(fname, message):
-    #os.makedirs(os.path.dirname(file_to_write))
-    #os.makedirs(os.path.dirname(file_to_write),exist_ok=True)
-    fh = open(fname, 'a')
-    fh.write(message+'\n')
-    fh.close()
-
-
-class Test:
-    def __init__(self):
-        self.contents = ''
-    def body_callback(self,buf):
-        self.contents = self.contents + buf
-
-def http_monitor(monitor_url):
-    t = Test()
-    #gzip_test = file("gzip_test.txt", 'w')
-    c = pycurl.Curl()
-    c.setopt(pycurl.WRITEFUNCTION,t.body_callback)
-    c.setopt(pycurl.ENCODING, 'gzip')
-    c.setopt(pycurl.URL,monitor_url)
-    c.perform()
-    http_code = c.getinfo(pycurl.HTTP_CODE)
-    http_conn_time = c.getinfo(pycurl.CONNECT_TIME)
-    http_pre_tran = c.getinfo(pycurl.PRETRANSFER_TIME)
-    http_start_tran = c.getinfo(pycurl.STARTTRANSFER_TIME)
-    http_total_time = c.getinfo(pycurl.TOTAL_TIME)
-    http_size = c.getinfo(pycurl.SIZE_DOWNLOAD)
-    http_result = {"time":datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),"http_code": http_code, "http_conn_time": http_conn_time,"http_total_time": http_total_time, "http_size": http_size}
-    return http_result
-
-
-def get_dmidecode():
-    P = Popen(['dmidecode'],stdout=PIPE)
-    data = P.stdout.read()
-    lines = data.split('\n\n')
-    dmidecode_line =  lines[2]
-    line = [i.strip() for i in dmidecode_line.split('\n') if i]
-    Manufacturer = line[2].split(': ')[-1]
-    product = line[3].split(': ')[-1]
-#    sn = line[5].split(': ')[-1]
-    return Manufacturer,product
-
-
-def disk_info():
-    disk_info_list = []
-    disk_info_dict = {}
-    disk = psutil.disk_usage('/')
-    # 硬盘总量
-    disk_info_dict["total"] = disk.total
-    # 硬盘使用量
-    disk_info_dict["used"] = disk.used
-    # 硬盘剩余量
-    disk_info_dict["free"] = disk.free
-    # 硬盘使用比
-    disk_info_dict["percent"] = disk.percent
-    disk_info_list.append(disk_info_dict)
-    return disk_info_list
-
-def get_host_ip():
+# import socket
+def sendWX(key,title,json):
+    """发送方糖告警"""
+    url = 'http://sc.ftqq.com/{}.send'.format(key)
+    dataJson={
+  "text": "Disk Monitor Alarm by Script",
+  "desp": "Disk Monitor Alarm by Script"
+}
+    dataJson['desp']=json
+    dataJson['text']=title
+    # r = requests.post(url, data=dataJson)
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    finally:
-        s.close()
-    return ip
+        r = post(url, data=dataJson,timeout=5)
+        return r.text
+    except exceptions.ConnectionError:
+        print('报错了，无法访问方糖.')
+    except Exception as e:
+        print('报错了，报错信息是:',e)
+    # return r.text
 
-#def get_http_status():
-#    global _http_monitor_target
-#    for http_url in (_http_monitor_target):
-#        html = requests.head(http_url)    # 用head方法去请求资源头部
-#        print html.status_code  # 状态码
-#        print(http_url)
+def testFS(testFile,item):
+    """测试文件系统是否为只读"""
+    try:
+        with open('{}'.format(testFile), 'w') as fp:
+            fp.write(item)
+        return True
+    except (OSError,IOError) as err:
+        if err.errno == 30:
+            return False
+        else:
+            return True
+class zibao():
+    """
+    get/post
+    """
+    def __init__(self,lp):
+        self.lp = lp
+    def delta(self):
+        # oldest_date = popen('ls /logs/' + gethostname() + '*.tar.gz |  grep -oE "20[0-9]+-[0-9]+-[0-9]+" | sort -n | head -1').read().strip() #.readlines()
+        oldest_date = popen('ls '+ self.lp + '/*bklog*.tar.gz |  grep -oE "20[0-9]+-[0-9]+-[0-9]+" | sort -n | head -1').read().strip() #.readlines()
 
+        # oldest_date = oldest_date[0]
+        print(oldest_date)
+        last_three_month = (datetime.datetime.now() + datetime.timedelta(days=-180)).strftime('%Y-%m-%d')
+        datestart = datetime.datetime.strptime(oldest_date,'%Y-%m-%d')
+        dateend = datetime.datetime.strptime(last_three_month,'%Y-%m-%d')
+        date_list = []
+        while datestart <= dateend:
+            date_list.append(datestart.strftime('%Y-%m-%d'))
+            datestart += datetime.timedelta(days=1)
+            # date_list.append(dateend.strftime('%Y-%m-%d'))
+            # dateend += datetime.timedelta(days=-1)
+        # file_reg = gethostname() + "*.tar.gz"
+        # filenames=showDir('/logs')
+        # filenames = fnmatch.filter(filenames, file_reg)
+        # print(filenames)
+        return date_list
 
-def ping_monitor(ping_target):
-    ping_result_lst = ping.quiet_ping(ping_target, timeout=1, count=5, psize=64)
-    ping_result={"ping_max_time":ping_result_lst[1],"ping_loss":ping_result_lst[0]}
-    return ping_result
-#def timer_post(ping_target,http_target,exec_times=1,interval=5):
-#def timer_post(http_target,exec_times=1,interval=5):
-def timer_post(http_target,interval=10):
-#    for count in range(exec_times):
-        i = datetime.datetime.now()
-        hostname = socket.gethostname()
-        disk_percent = str(psutil.disk_usage('/').percent) +'%'
-        total_cpu_count=psutil.cpu_count()
-        uptime_day=str(psutil.boot_time()/24/60/60/1000) + 'days'
-        mem_total =str(psutil.virtual_memory().total/1024/1024)+'MB'
-        cpu_percent = str(psutil.cpu_percent(interval=None, percpu=False)) + '%'
-        #mem_used = psutil.Process(os.getpid()).memory_info().rss
-        mem_used = str(psutil.virtual_memory().percent) +'%'
-        myaddr = get_host_ip()
-        ver=platform.dist()[0] + platform.dist()[1]
-        #dmi=get_dmidecode()
-        #ping_result_dict={}
-        http_result_dict={}
-        host_info={
-                      "ip":myaddr,
-                      "os":ver,
-                      "time":i.strftime("%Y-%m-%d %H:%M:%S"),
-                      "hostname": hostname,
-                      "disk_usage": disk_percent,
-                      "total_cpu_count":total_cpu_count,
-                      "cpu_percent":cpu_percent,
-                      "mem_total":mem_total,
-                      "mem_used_prcent":mem_used,
-        }
-#        for pt in ping_target:
-#            ping_result=ping_monitor(pt)
-#            ping_result_dict.update({pt:ping_result})
-        for url in http_target:
-            http_result=http_monitor(url)
-            http_result_dict.update({url:http_result})
-        host_info.update({"http_result":http_result_dict})
-#        host_info.update({"ping_result":ping_result_dict})
-        json_data = json.dumps(host_info,encoding="utf8", ensure_ascii=True,sort_keys=True)
-        print 'json_data:\t' + json_data
-        log_file = 'monitor.' + i.strftime('%Y.%m.%d') + '.json'
-        write_to_file(log_file, json_data)
-        #count +=1
-        #print 'count=' + str(count+1)
-#        time.sleep(interval)
-#        break
-#    req = urllib2.Request('http://192.168.11.163:20888/hostinfo', json_data,{'Content-Type': 'application/json'})
-#    f = urllib2.urlopen(req)
-#    response = f.read()
-#    print response
-#    f.close()
-        t = Timer(interval, timer_post, (http_target,interval,))
-        t.start()
-
+    def showDir(self):
+        ls=listdir(self.lp) #.sort(key=lambda x:str(x[:-7]))
+        return ls
+    def rmlogtar(self,file):
+        pass
 
 if __name__ == "__main__":
-    _ping_monitor_target=['8.8.8.8','114.114.114.114']
-    _http_monitor_target = ['https://www.163.com','https://www.qq.com']
-    #timer_post(_ping_monitor_target,_http_monitor_target,exec_times=2,interval=3)
+    # import argparse
+    parser = argm(prog='serverjo',description="Host Monitor")
+    parser.add_argument("-K", "--auth-key", dest='authKey', help="Server jo auth key.")
+    parser.add_argument("-l", dest='logpath', default='/logs',help="log dir path.")
+    # parse arguments
+    args = parser.parse_args()
+    authKey = args.authKey
+    logpath = args.logpath
+    print(logpath)
+    st = statvfs('/')
+    freeDisk= st.f_bavail * st.f_frsize/1024
+    freeDisk_G=freeDisk/1024/1024
+    df_percent=disk_usage('/').percent
+
+    IdFilePath='/home/tomcat/war/var/web-online/webapps/ROOT/WEB-INF/classes/common.properties'
+    hisId = None
+    file_reg = "*bklog*.tar.gz"
+    docleanlog = zibao(logpath)
+    filenames=docleanlog.showDir()
+    print(filenames)
+
+    filenames = fnmatch.filter(filenames, file_reg)
+    # for f in showDir('/tmp'):
+    #     print(re.match(ft, f).group())
+    to_be_deleted = []  # 保存筛选出来dog的列表
+    frange = docleanlog.delta()
+    if len(frange) == 0:
+        print('没啥好删的')
+    else:
+        for data in filenames:  # 遍历列表
+            for t in frange:
+                # if  re.match('.*2019-10-01.*', data) != None:
+                # print(t,data)
+                if  re.search(t, data) != None:
+                    to_be_deleted.append(data)
+    # for k in to_be_deleted:
+    #     print(k)
+        # print(f.endswith('.tar.gz'))
+    if path.exists(IdFilePath) is True:
+        hisId = popen('grep hisId '+ IdFilePath + ' | cut -d= -f2').readlines()
+        hisId='hisId为:' + hisId[0]
+
+
+    if hisId is None:
+        hisId = '未获取到hisId信息'
+
+    hname = '主机名为:' + gethostname()
+    Rtime=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    testfile = '/tmp/testfilesystem'
+
+    if authKey is not None:
+        try:
+            if  df_percent >= float(85) and df_percent < float(90):
+                title = '[warnning]前置机空间告警,{}'.format(hisId)
+                alertMessage = '当前时间为:{},{},{}前置机空间使用率告警.目前使用率为{},剩余空间为{}G,请及时处理。'.format(Rtime,hisId,hname,df_percent,int(freeDisk_G))
+                print(alertMessage)
+                sendWX(authKey,title,alertMessage)
+            elif df_percent >= float(90):
+                title = '[critical]前置机空间告警,{}'.format(hisId)
+                alertMessage = '当前时间为:{},{},{}前置机空间使用率告警.目前使用率为{},剩余空间为{}G,请及时处理。'.format(Rtime,hisId,hname,df_percent,int(freeDisk_G))
+                print(alertMessage)
+                sendWX(authKey,title,alertMessage)
+            else:
+                print('没毛病.当前时间为:{},目前空间使用率为{},剩余空间为{}G'.format(Rtime,df_percent,int(freeDisk_G)))
+
+            isWriteable=testFS(testfile,Rtime)
+            if isWriteable == False:
+                fserr_title = '前置机文件系统只读告警,{}'.format(hisId)
+                fserr_message = '当前时间为:{},{},{}前置机文件系统只读,请及时处理。'.format(Rtime,hisId,hname)
+                sendWX(authKey,fserr_title,fserr_message)
+        except Exception as e:
+                print('报错了，报错信息是:',e)
+    else:
+            print('The auth key is empty.Please Check the input').com','https://www.qq.com']
     timer_post(_http_monitor_target)
