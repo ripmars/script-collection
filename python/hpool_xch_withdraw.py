@@ -2,7 +2,7 @@
 # -*- encoding: utf-8 -*-
 '''
 @File        : hpool_xch_withdraw.py
-@Desc        : 当前仅支持手动输入Google Authenticator验证码，使用`oathtool`生成谷歌验证码，获取code完成自动提现.使用telegram bot发送消息通知.
+@Desc        : 当前支持`oathtool`获取Google Authenticator验证码，获取token完成自动提现.使用telegram bot发送消息通知.
 @Time        : 2021/11/01 16:11:55
 @Author      : Chaos
 @Version     : 1.3
